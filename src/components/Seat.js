@@ -3,7 +3,8 @@ import { Circle } from './Circle';
 
 import { getWidthForSeats, getDistanceRatioForSeats } from '../utils';
 
-export const Seat = ({ track, index, length, key, nameUser }) => {
+export const Seat = ({ track, index, length, key, nameUser,participants }) => {
+  console.log("participants",participants)
   const seatSize = getWidthForSeats(length);
   const disanceRatio = getDistanceRatioForSeats(length);
   const angle = (360 / length) * index;
@@ -17,8 +18,8 @@ export const Seat = ({ track, index, length, key, nameUser }) => {
     <video height={seatSize} style={{ flexShrink: 0 }} autoPlay='1' key={`track_${track.getId()}`} ref={(ref) => ref && track.attach(ref)}/>
     <div class="overlayText" style={{position:'absolute', top:'70%', textAlign:'center', zIndex:'1'}}>
         <div style={{color:'white', fontsize: '20px', alignself: 'center'}}>{characters[index]}</div>
-        <div style={{color:'white', fontsize: '20px', alignself: 'center'}}>{names[index]}</div>
-        <div style={{color:'white', fontsize: '20px', alignself: 'center'}}>{track.getId()}</div>
+        <div style={{color:'white', fontsize: '20px', alignself: 'center'}}>{nameUser}</div>
+        <div style={{color:'white', fontsize: '20px', alignself: 'center'}}>{track?.ownerEndpointId}</div>
     </div>
 
   </Circle>);
