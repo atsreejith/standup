@@ -1,201 +1,267 @@
 /* global JitsiMeetJS config*/
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import './App.css';
-import $ from 'jquery'
-import { Seat } from './components/Seat';
-import { ConnectForm } from './components/ConnectForm';
-import { Audio } from './components/Audio';
-import useWindowSize from './hooks/useWindowSize'
+import React, { useState, useCallback, useEffect, useMemo } from "react";
+import "./App.css";
+import $ from "jquery";
+import { Seat } from "./components/Seat";
+import { ConnectForm } from "./components/ConnectForm";
+import { Audio } from "./components/Audio";
+import useWindowSize from "./hooks/useWindowSize";
 
-import qs from 'qs'
-import { withThemeCreator } from '@material-ui/styles';
+import qs from "qs";
+import { withThemeCreator } from "@material-ui/styles";
 
-window.$  = $
-let UserName = 'test';
+window.$ = $;
+let UserName = "test";
 const connect = async ({ domain, room, name, config }) => {
   const connectionConfig = Object.assign({}, config);
   let serviceUrl = connectionConfig.websocket || connectionConfig.bosh;
 
   serviceUrl += `?room=${room}`;
-  if(serviceUrl.indexOf('//') === 0){
-    serviceUrl = `https:${serviceUrl}`
+  if (serviceUrl.indexOf("//") === 0) {
+    serviceUrl = `https:${serviceUrl}`;
   }
   connectionConfig.serviceUrl = connectionConfig.bosh = serviceUrl;
-  
+
   return new Promise((resolve, reject) => {
-    const connection = new JitsiMeetJS.JitsiConnection(null, undefined, connectionConfig);
-    console.log('JitsiMeetJS.events.connection.CONNECTION_ESTABLISHED', JitsiMeetJS.events.connection.CONNECTION_ESTABLISHED)
+    const connection = new JitsiMeetJS.JitsiConnection(
+      null,
+      undefined,
+      connectionConfig
+    );
+    console.log(
+      "JitsiMeetJS.events.connection.CONNECTION_ESTABLISHED",
+      JitsiMeetJS.events.connection.CONNECTION_ESTABLISHED
+    );
     connection.addEventListener(
       JitsiMeetJS.events.connection.CONNECTION_ESTABLISHED,
-      () => resolve(connection));
-    connection.addEventListener(JitsiMeetJS.events.connection.CONNECTION_FAILED, reject);
+      () => resolve(connection)
+    );
+    connection.addEventListener(
+      JitsiMeetJS.events.connection.CONNECTION_FAILED,
+      reject
+    );
     connection.connect();
-  }) 
-}
+  });
+};
 
 const join = async ({ connection, room, name }) => {
   const conference = connection.initJitsiConference(room, {});
   conference.setDisplayName(name);
   UserName = name;
-  return new Promise(resolve => {
-    conference.on(JitsiMeetJS.events.conference.CONFERENCE_JOINED, () => resolve(conference));
+  return new Promise((resolve) => {
+    conference.on(JitsiMeetJS.events.conference.CONFERENCE_JOINED, () =>
+      resolve(conference)
+    );
     conference.join();
-  })
-}
+  });
+};
 
 const connectandJoin = async ({ domain, room, name, config }) => {
+  const connection = await connect({ domain, room, name, config });
+  const localTracks = await JitsiMeetJS.createLocalTracks(
+    { devices: ["video", "audio"], facingMode: "user" },
+    true
+  );
 
-  const connection = await connect({ domain, room, name, config })
-  const localTracks = await JitsiMeetJS.createLocalTracks({ devices: ['video', 'audio'], facingMode: 'user'}, true);
+  const conference = await join({ connection, room, name });
+  const localTrack = localTracks.find((track) => track.getType() === "video");
+  conference.addTrack(localTrack);
+  const localAudioTrack = localTracks.find(
+    (track) => track.getType() === "audio"
+  );
+  conference.addTrack(localAudioTrack);
 
-  const conference = await join({ connection, room, name })
-  const localTrack = localTracks.find(track => track.getType() === 'video')
-  conference.addTrack(localTrack)
-  const localAudioTrack = localTracks.find(track => track.getType() === 'audio')
-  conference.addTrack(localAudioTrack)
+  return { connection, conference, localTrack };
+};
 
-  return { connection, conference, localTrack }
-}
+const loadAndConnect = ({ domain, room, name }) => {
+  // console.log(domain,name);
+  return new Promise((resolve) => {
+    const script = document.createElement("script");
+    script.onload = () => {
+      JitsiMeetJS.init();
 
-const loadAndConnect = ({ domain, room, name}) => {
-// console.log(domain,name);
-    return new Promise(( resolve ) => {
-      const script = document.createElement('script')
-      script.onload = () => {
-        JitsiMeetJS.init();
-
-        const configScript = document.createElement('script')
-        configScript.src = `https://${domain}/config.js`;
-        document.querySelector('head').appendChild(configScript);
-        configScript.onload = () => {
-          connectandJoin({ domain, room, name, config }).then(resolve)
-        }       
+      const configScript = document.createElement("script");
+      configScript.src = `https://${domain}/config.js`;
+      document.querySelector("head").appendChild(configScript);
+      configScript.onload = () => {
+        connectandJoin({ domain, room, name, config }).then(resolve);
       };
+    };
 
-      script.src = `https://${domain}/libs/lib-jitsi-meet.min.js`;
-      document.querySelector('head').appendChild(script);
-    })
-}
+    script.src = `https://${domain}/libs/lib-jitsi-meet.min.js`;
+    document.querySelector("head").appendChild(script);
+  });
+};
 
 const useTracks = () => {
-  const [tracks, setTracks] = useState([])
-  
-  const addTrack = useCallback((track) => {
-    setTracks((tracks) => {
-      const hasTrack = tracks.find(_track => track.getId() === _track.getId())
+  const [tracks, setTracks] = useState([]);
 
-      if(hasTrack) return tracks;
+  const addTrack = useCallback(
+    (track) => {
+      setTracks((tracks) => {
+        const hasTrack = tracks.find(
+          (_track) => track.getId() === _track.getId()
+        );
 
-      return [...tracks, track]
-      
-    });
-  }, [setTracks])
+        if (hasTrack) return tracks;
 
-  const removeTrack = useCallback((track) => {
-    setTracks((tracks) => tracks.filter(_track => track.getId() !== _track.getId()))
-  }, [setTracks])
+        return [...tracks, track];
+      });
+    },
+    [setTracks]
+  );
 
-  return [tracks, addTrack, removeTrack]
-}
+  const removeTrack = useCallback(
+    (track) => {
+      setTracks((tracks) =>
+        tracks.filter((_track) => track.getId() !== _track.getId())
+      );
+    },
+    [setTracks]
+  );
+
+  return [tracks, addTrack, removeTrack];
+};
 
 const getDefaultParamsValue = () => {
-  const params = document.location.search.length > 1 ? qs.parse(document.location.search.slice(1)) : {}
-  // debugger;
+  const params =
+    document.location.search.length > 1
+      ? qs.parse(document.location.search.slice(1))
+      : {};
   return {
-    room: params.room ?? 'daily_standup',
-    domain: params.domain ?? '127.0.0.1:8080',
-    name: params.name ?? 'name',
+    room: params.room ?? "daily_standup",
+    domain: params.domain ?? "127.0.0.1:8080",
+    name: params.name ?? "name",
     autoJoin: params.autojoin ?? false,
-  }
-}
+  };
+};
 
 function App() {
-  // console.error("USER_JOINED");
-  useWindowSize()
-  const defaultParams = useMemo(getDefaultParamsValue, [])
+  useWindowSize();
+  const defaultParams = useMemo(getDefaultParamsValue, []);
 
-  const [mainState, setMainState] = useState('init')
-  const [domain, setDomain] = useState(defaultParams.domain)
-  const [room, setRoom] = useState(defaultParams.room)
-  const [name, setName] = useState(defaultParams.name)
-  const [conference, setConference] = useState(null)
+  const [mainState, setMainState] = useState("init");
+  const [domain, setDomain] = useState(defaultParams.domain);
+  const [room, setRoom] = useState(defaultParams.room);
+  const [name, setName] = useState(defaultParams.name);
+  const [conference, setConference] = useState(null);
   const [videoTracks, addVideoTrack, removeVideoTrack] = useTracks();
   const [audioTracks, addAudioTrack, removeAudioTrack] = useTracks();
-  const [usersList,setUsersList]=useState({});
-  
-  const addTrack = useCallback((track) => {
-    console.error("track",track);
-    if(track.getType() === 'video') addVideoTrack(track)
-    if(track.getType() === 'audio') addAudioTrack(track)
-  }, [ addVideoTrack, addAudioTrack ])
+  const [usersList, setUsersList] = useState([]);
+  const [participants, setParticipants] = useState({});
 
-  const removeTrack = useCallback((track) => {
-    if(track.getType() === 'video') removeVideoTrack(track)
-    if(track.getType() === 'audio') removeAudioTrack(track)
-  }, [removeAudioTrack, removeVideoTrack])
+  const userAdded = useCallback((id, user) => {
+    setUsersList([{ id: id, name: user._displayName }]);
+  }, []);
+  const addTrack = useCallback(
+    (track) => {
+      if (track.getType() === "video") addVideoTrack(track);
+      if (track.getType() === "audio") addAudioTrack(track);
+    },
+    [addVideoTrack, addAudioTrack]
+  );
 
-  const connect = useCallback(async (e) => {
-    e && e.preventDefault()
-    setMainState('loading')
-    const { connection, conference, localTrack } = await loadAndConnect({ domain, room, name });
-    setMainState('started')
-    setConference(conference)
-    addTrack(localTrack)
-    console.error("localTrack",localTrack)
-    // setUsersList([name]);
-  }, [addTrack, domain, room, name]);
-const userAdded=(id,user)=>{
-console.error("USER_JOINED",id,user._displayName);
+  const removeTrack = useCallback(
+    (track) => {
+      if (track.getType() === "video") removeVideoTrack(track);
+      if (track.getType() === "audio") removeAudioTrack(track);
+    },
+    [removeAudioTrack, removeVideoTrack]
+  );
 
-let users = {...usersList};
-users[id]=user._displayName;
-setUsersList(users);
-// console.error("USER_DATA",JSON.stringify(user));
-}
+  const connect = useCallback(
+    async (e) => {
+      e && e.preventDefault();
+      setMainState("loading");
+      const { connection, conference, localTrack } = await loadAndConnect({
+        domain,
+        room,
+        name,
+      });
+      setMainState("started");
+      setConference(conference);
+      addTrack(localTrack);
+      setUsersList([{ id: conference.myUserId(), name: name }]);
+    },
+    [domain, room, name]
+  );
   useEffect(() => {
-    if(!conference) return
+    let userList = { ...participants };
+    for (let i = 0; i < usersList.length; i++) {
+      userList[usersList[i].id] = usersList[i].name;
+    }
+    setParticipants(userList);
+  }, [usersList]);
 
-    conference.on(JitsiMeetJS.events.conference.TRACK_ADDED, addTrack)
-    conference.on(JitsiMeetJS.events.conference.TRACK_REMOVED, removeTrack)
-    conference.on(JitsiMeetJS.events.conference.USER_JOINED, userAdded)
-    console.error("getParticipants",conference.getParticipants());
+  useEffect(() => {
+    if (!conference) return;
+
+    conference.on(JitsiMeetJS.events.conference.TRACK_ADDED, addTrack);
+    conference.on(JitsiMeetJS.events.conference.TRACK_REMOVED, removeTrack);
+    conference.on(JitsiMeetJS.events.conference.USER_JOINED, userAdded);
+
+    //adding all participants to the userList state
     const participants = conference.getParticipants();
-    let userList = {};
-    for(let i = 0;i<participants.length;i++){
-      userList[participants[i]._id]=participants[i]._displayName;
+    let userList = [];
+    for (let i = 0; i < participants.length; i++) {
+      userList.push({
+        id: participants[i]._id,
+        name: participants[i]._displayName,
+      });
     }
-    // if(userList!==null){
-    //   setUsersList(userList);
-    // }
-  }, [userAdded,addTrack, conference, removeTrack])
+    if (Object.keys(userList).length > 0) {
+      setUsersList(userList);
+    }
+  }, [conference, userAdded]);
 
   useEffect(() => {
-    if(defaultParams.autoJoin || defaultParams.autoJoin === ''){
-      connect()
+    if (defaultParams.autoJoin || defaultParams.autoJoin === "") {
+      connect();
     }
-  }, [connect, defaultParams.autoJoin])
-
+  }, [defaultParams.autoJoin]);
 
   return (
     <div className="App">
-      {/* {JSON.stringify(track)} */}
       <header className="App-header">
-        { mainState === 'init' && <ConnectForm connect={connect} domain={domain} name={name} room={room} setRoom={setRoom} setDomain={setDomain} setName={setName} /> }
-        { mainState === 'loading' && 'Loading' }
-        { mainState === 'started' &&
-        <div style={{
-          height: '100vh', width: '100vw', maxHeight: '100vw', maxWidth: '100vh',
-          background: 'rgba(0, 100,100, 1)',
-          position: 'relative',
-          borderRadius: '100%'
-      }}>
-        {
-          videoTracks.map((track, index) => <Seat track={track} index={index} length={videoTracks.length} participants={usersList} key={track.getId()} />)
-        }
-        {
-          audioTracks.map((track, index) => <Audio track={track} index={index} key={track.getId()} />)
-        }
-       </div>}
+        {mainState === "init" && (
+          <ConnectForm
+            connect={connect}
+            domain={domain}
+            name={name}
+            room={room}
+            setRoom={setRoom}
+            setDomain={setDomain}
+            setName={setName}
+          />
+        )}
+        {mainState === "loading" && "Loading"}
+        {mainState === "started" && (
+          <div
+            style={{
+              height: "100vh",
+              width: "100vw",
+              maxHeight: "100vw",
+              maxWidth: "100vh",
+              background: "rgba(0, 100,100, 1)",
+              position: "relative",
+              borderRadius: "100%",
+            }}
+          >
+            {videoTracks.map((track, index) => (
+              <Seat
+                track={track}
+                index={index}
+                length={videoTracks.length}
+                participants={participants}
+                key={track.getId()}
+              />
+            ))}
+            {audioTracks.map((track, index) => (
+              <Audio track={track} index={index} key={track.getId()} />
+            ))}
+          </div>
+        )}
       </header>
     </div>
   );
